@@ -47,40 +47,50 @@ class _AgentDashboardState extends State<AgentDashboard> {
 
     if (apiKey.isEmpty) {
       _addLog("সতর্কতা: Settings এ কোনো Gemini API Key নেই!");
-      _addLog("ওপরে ডান পাশের Settings (⚙️) আইকনে গিয়ে আপনার API Key দিন।");
       setState(() => _isProcessing = false);
       return;
     }
 
     try {
-      _addLog("Gemini AI এর সাথে যোগাযোগ করা হচ্ছে...");
-      final url = Uri.parse(
-        'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=$apiKey',
-      );
+      _addLog("Gemini 2.0 AI এর সাথে যোগাযোগ করা হচ্ছে...");
+      
+      // গুগল এর লেটেস্ট মডেলগুলো ট্রাই করা
+      final models = ['gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-1.5-flash-latest'];
+      http.Response? res;
+      Map<String, dynamic>? data;
 
-      final res = await http.post(
-        url,
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          "contents": [{
-            "parts": [{"text": "You are a personal automated content agent. The user wants: '$task'. Write a complete creative script with title, voiceover text, and short visual cues in Bengali or English."}]
-          }]
-        }),
-      );
+      for (final m in models) {
+        final url = Uri.parse(
+          'https://generativelanguage.googleapis.com/v1beta/models/$m:generateContent?key=$apiKey',
+        );
 
-      final data = jsonDecode(res.body);
+        res = await http.post(
+          url,
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            "contents": [{
+              "parts": [{"text": "You are a personal automated content agent. The user wants: '$task'. Write a complete creative script with title, voiceover text, and short visual cues in Bengali or English."}]
+            }]
+          }),
+        );
 
-      if (res.statusCode == 200 && data['candidates'] != null && (data['candidates'] as List).isNotEmpty) {
+        data = jsonDecode(res.body);
+        if (res.statusCode == 200) {
+          _addLog("মডেল সফলভাবে কানেক্ট হয়েছে: $m");
+          break;
+        }
+      }
+
+      if (res != null && res.statusCode == 200 && data != null && data['candidates'] != null) {
         final text = data['candidates'][0]['content']['parts'][0]['text'];
         setState(() {
           _lastScript = text;
         });
         _addLog("সফলভাবে কনটেন্ট তৈরি হয়েছে!");
-        _addLog("ভিডিও প্রসেসিং ও পোস্টিং মডিউলে ডেটা পাঠানো হয়েছে।");
+        _addLog("টাস্ক এক্সিকিউশন সম্পূর্ণ!");
       } else {
-        final errorMsg = data['error']?['message'] ?? 'API রিকোয়েস্ট ব্যর্থ হয়েছে (${res.statusCode})';
+        final errorMsg = data?['error']?['message'] ?? 'API রিকোয়েস্ট ব্যর্থ হয়েছে (${res?.statusCode})';
         _addLog("API এরর: $errorMsg");
-        _addLog("পরামর্শ: Settings-এ গিয়ে API Key টি ঠিক আছে কিনা চেক করুন।");
       }
     } catch (e) {
       _addLog("ব্যর্থ হয়েছে: $e");
@@ -135,20 +145,20 @@ class _AgentDashboardState extends State<AgentDashboard> {
             if (_lastScript.isNotEmpty) ...[
               const Align(
                 alignment: Alignment.centerLeft,
-                child: Text("তৈরি হওয়া স্ক্রিপ্ট / কনটেন্ট:", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.deepPurple)),
+                child: Text("তৈরি হওয়া স্ক্রিপ্ট / কনটেন্ট:", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.deepPurple, fontSize: 16)),
               ),
               const SizedBox(height: 6),
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(12),
-                constraints: const BoxConstraints(maxHeight: 180),
+                constraints: const BoxConstraints(maxHeight: 220),
                 decoration: BoxDecoration(
                   color: Colors.purple.shade50,
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.purple.shade200),
+                  border: Border.all(color: Colors.purple.shade300),
                 ),
                 child: SingleChildScrollView(
-                  child: Text(_lastScript, style: const TextStyle(fontSize: 14)),
+                  child: Text(_lastScript, style: const TextStyle(fontSize: 14, height: 1.4)),
                 ),
               ),
               const SizedBox(height: 12),
@@ -208,7 +218,7 @@ class _SettingsPageState extends State<SettingsPage> {
     await p.setString('gemini_key', key);
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(key.isEmpty ? "API Key মুছে ফেলা হয়েছে" : "API Key সফলভাবে সংরক্ষিত হয়েছে!")),
+        const SnackBar(content: Text("API Key সফলভাবে সংরক্ষিত হয়েছে!")),
       );
       Navigator.pop(context);
     }
@@ -226,14 +236,8 @@ class _SettingsPageState extends State<SettingsPage> {
               controller: _keyController,
               decoration: const InputDecoration(
                 labelText: "Google Gemini API Key",
-                hintText: "AIzaSy...",
                 border: OutlineInputBorder(),
               ),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              "ফ্রি API Key পেতে aistudio.google.com-এ যান এবং 'Get API key'-তে ক্লিক করুন।",
-              style: TextStyle(color: Colors.grey, fontSize: 12),
             ),
             const SizedBox(height: 16),
             ElevatedButton(
