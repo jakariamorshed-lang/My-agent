@@ -20,8 +20,11 @@ jobs:
         with:
           channel: 'stable'
 
-      - name: Create Flutter Project
-        run: flutter create --project-name=my_agent . --platforms=android
+      - name: Setup Project & Dependencies
+        run: |
+          flutter create --project-name=my_agent . --platforms=android
+          flutter pub add http shared_preferences
+          git checkout -- lib/main.dart
 
       - name: Build Debug APK
         run: flutter build apk --debug
